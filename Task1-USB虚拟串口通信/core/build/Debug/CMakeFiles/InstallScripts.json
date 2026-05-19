@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/GithubProject/whsw-Task1-liuzhiheng/Task1-USB\u865a\u62df\u4e32\u53e3\u901a\u4fe1/core/build/Debug/cmake_install.cmake",
+		"D:/GithubProject/whsw-Task1-liuzhiheng/Task1-USB\u865a\u62df\u4e32\u53e3\u901a\u4fe1/core/build/Debug/cmake/stm32cubemx/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

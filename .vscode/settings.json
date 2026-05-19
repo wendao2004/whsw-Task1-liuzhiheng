@@ -1,3 +1,21 @@
 {
-    "cmake.sourceDirectory": "D:/GithubProject/whsw-Task1-liuzhiheng/Task1-USB虚拟串口通信/core"
+    // 插件内置CMake
+    "cmake.cmakePath": "C:\\Users\\Administrator\\AppData\\Local\\stm32cube\\bundles\\cmake\\4.3.1+st.1\\bin\\cmake.exe",
+    "cmake.generator": "Ninja",
+
+    // 核心：工具链 + 编译器完整路径（双配置，绝对找到）
+    "cmake.configureSettings": {
+        "CMAKE_MAKE_PROGRAM": "C:\\Users\\Administrator\\AppData\\Local\\stm32cube\\bundles\\ninja\\1.13.2+st.1\\bin\\ninja.exe",
+        "CMAKE_TOOLCHAIN_FILE": "C:\\Users\\Administrator\\AppData\\Local\\stm32cube\\bundles\\gnu-tools-for-stm32-14_3_1-description\\1.0.1+st.2\\etc\\gnu-tools-for-stm32.cmake",
+        "CMAKE_C_COMPILER": "C:\\Users\\Administrator\\AppData\\Local\\stm32cube\\bundles\\gnu-tools-for-stm32\\14.3.1+st.2\\bin\\arm-none-eabi-gcc.exe",
+        "CMAKE_CXX_COMPILER": "C:\\Users\\Administrator\\AppData\\Local\\stm32cube\\bundles\\gnu-tools-for-stm32\\14.3.1+st.2\\bin\\arm-none-eabi-g++.exe"
+    },
+
+    // 环境变量把所有工具加入路径
+    "cmake.environment": {
+        "PATH": "C:\\Users\\Administrator\\AppData\\Local\\stm32cube\\bundles\\cmake\\4.3.1+st.1\\bin;C:\\Users\\Administrator\\AppData\\Local\\stm32cube\\bundles\\ninja\\1.13.2+st.1\\bin;C:\\Users\\Administrator\\AppData\\Local\\stm32cube\\bundles\\gnu-tools-for-stm32\\14.3.1+st.2\\bin;${env.PATH}"
+    },
+
+    "stm32-vscode-extension.bundles.useBundledTools": true,
+    "cmake.sourceDirectory": "D:/GithubProject/whsw-Task1-liuzhiheng/Task1-USB虚拟串口通信/core/cmake/stm32cubemx"
 }
