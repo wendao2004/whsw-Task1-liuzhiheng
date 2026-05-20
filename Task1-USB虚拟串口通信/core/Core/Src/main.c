@@ -22,7 +22,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "usbd_cdc_if.h"
+#include <string.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,7 +46,17 @@
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
-
+uint32_t system_tick = 0;
+float run_seconds = 0.0f;
+uint8_t led_state = 0;
+uint8_t led_twinkle_mode = 0;
+uint8_t sinx_mode = 0;
+float sinx_angle = 0.0f;
+uint16_t send_counter = 0;
+uint16_t led_twinkle_counter = 0;
+uint8_t usb_sent = 0;
+uint8_t protocol_mode = 0;  // 0=JustFloat, 1=FireWater
+extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -92,7 +104,7 @@ int main(void)
   MX_TIM2_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -102,6 +114,27 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    static uint32_t last_send = 0;
+    if (HAL_GetTick() - last_send >= 100) {
+      last_send = HAL_GetTick();
+      run_seconds = (float)last_send / 1000.0f;
+      
+      if (sinx_mode) {
+        sinx_angle += 0.1f;
+        float sin_value = sin(sinx_angle);
+        Send_JustFloat_Data(run_seconds, sin_value);
+      } else {
+        Send_JustFloat_Data(run_seconds, run_seconds);
+      }
+    }
+    
+    if (led_twinkle_mode) {
+      static uint32_t last_toggle = 0;
+      if (HAL_GetTick() - last_toggle >= 100) {
+        last_toggle = HAL_GetTick();
+        HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+      }
+    }
   }
   /* USER CODE END 3 */
 }
@@ -229,7 +262,96 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  if (htim->Instance == TIM2) {
+    system_tick++;
+    run_seconds = (float)system_tick / 1000.0f;
+    
+    send_counter++;
+    if (send_counter >= 100) {
+      send_counter = 0;
+      if (sinx_mode) {
+        sinx_angle += 0.1f;
+        float sin_value = sin(sinx_angle);
+        Send_JustFloat_Data(run_seconds, sin_value);
+      } else {
+        Send_JustFloat_Data((float)system_tick, run_seconds);
+      }
+    }
+    
+    if (led_twinkle_mode) {
+      led_twinkle_counter++;
+      if (led_twinkle_counter >= 100) {
+        led_twinkle_counter = 0;
+        HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+      }
+    }
+  }
+}
 
+void LED_On(void) {
+  led_twinkle_mode = 0;
+  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_SET);
+  led_state = 1;
+}
+
+void LED_Off(void) {
+  led_twinkle_mode = 0;
+  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
+  led_state = 0;
+}
+
+void LED_Twinkle(void) {
+    led_twinkle_mode = !led_twinkle_mode;  // 切换模式
+    if (led_twinkle_mode) {
+        led_twinkle_counter = 0;
+    }
+}
+
+void Send_JustFloat_Data(float ch0, float ch1) {
+    if (protocol_mode == 0) {
+        uint8_t buffer[12];
+        memcpy(buffer, &ch0, 4);
+        memcpy(buffer + 4, &ch1, 4);
+        buffer[8] = 0x00;
+        buffer[9] = 0x00;
+        buffer[10] = 0x80;
+        buffer[11] = 0x7f;
+        CDC_Transmit_FS(buffer, 12);
+    } else {
+        char buffer[64];
+        uint32_t hours = (uint32_t)(run_seconds / 3600);
+        uint32_t minutes = (uint32_t)(run_seconds / 60) % 60;
+        uint32_t seconds = (uint32_t)run_seconds % 60;
+        
+        uint16_t len = sprintf(buffer, "2026-05-19 %02lu:%02lu:%02lu %.2f\n",
+                              hours, minutes, seconds, run_seconds);
+        CDC_Transmit_FS((uint8_t*)buffer, len);
+    }
+}
+
+void Process_Command(uint8_t *cmd, uint32_t len) {
+  if (len > 0 && len < APP_RX_DATA_SIZE) {
+    cmd[len] = '\0';
+  }
+  
+  if (strncmp((char*)cmd, "led_on", 6) == 0) {
+    LED_On();
+  } else if (strncmp((char*)cmd, "led_off", 7) == 0) {
+    LED_Off();
+  } else if (strncmp((char*)cmd, "led_twinkle", 12) == 0) {
+    LED_Twinkle();
+  } else if (strncmp((char*)cmd, "sinx", 4) == 0) {
+    sinx_mode = !sinx_mode;
+    if (sinx_mode) {
+      sinx_angle = 0.0f;
+    }
+  } else if (strncmp((char*)cmd, "proto_justfloat", 16) == 0) {
+    protocol_mode = 0;
+  } else if (strncmp((char*)cmd, "proto_firewater", 16) == 0) {
+    protocol_mode = 1;
+  }
+}
 /* USER CODE END 4 */
 
 /**
