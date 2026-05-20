@@ -1,116 +1,132 @@
-## USB虚拟串口通信学习笔记
+# Task1 - USB虚拟串口通信笔记
 
-### 开发板信息
+## 开发板
 
-- **型号**: STM32F407VET6
-- **内核**: Cortex-M4，最高168 MHz
-- **USB**: USB OTG FS（需严格48 MHz）
+STM32F407VET6，用probe-rs烧录
 
-### CubeMX配置步骤
+## 硬件连接
 
-1. **Debug配置**
-   - System Core → Debug → Serial Wire（否则可能无法再次烧录）
-2. **RCC设置**
-   - System Core → RCC → High Speed Clock (HSE) → Crystal/Ceramic Resonator（8 MHz晶振）
-3. **USB配置**
-   - Connectivity → USB\_OTG\_FS → Mode = Device Only
-   - Middleware → USB\_DEVICE → Class For FS IP = Communication Device Class (CDC)
-   - CubeMX自动配置PA11(DM)、PA12(DP)为USB复用
-4. **定时器TIM2配置**
-   - Timers → TIM2 → 时钟源：Internal Clock
-   - Prescaler = 167，Period = 999 → 1ms中断
-   - 用于获取运行时长和定时上报数据
-5. **GPIO配置**
-   - 板载LED：PD2，推挽输出，初始低电平
-6. **时钟树配置**
-   - PLL\_M = 8
-   - PLL\_N = 336
-   - PLL\_P = 2
-   - PLL\_Q = 7（确保USB OTG FS为48MHz）
-7. **工程生成**
-   - Toolchain/IDE：CMake
-   - 勾选"Generate peripheral initialization as a pair of '.c/.h' files per peripheral"
+- 烧录用ST-Link接口
+- 通信用Type-C接口（USB OTG）
+- LED在PA5
 
-### VOFA+协议说明
+## CubeMX配置
 
-#### JustFloat协议
+### 基础配置
 
-- 格式：\[通道0(float)]\[通道1(float)]...\[通道N(float)] + 帧尾(0x04 0x05 0x06 0x07)
-- 每个通道占用4字节，小端序
-- 高效二进制协议，适合实时数据传输
+- Debug：Serial Wire（不然下次烧录会出问题）
+- RCC：HSE选Crystal/Ceramic Resonator
+- 时钟：8MHz晶振，PLL配置168MHz主频
 
-### 代码实现要点
+### USB配置
 
-#### 1. 定时器中断（TIM2）
+- USB_OTG_FS → Mode = Device Only
+- USB_DEVICE → Class选CDC
+- PA11/PA12自动配置成USB引脚
 
-- 1ms中断一次，用于计时和定时上报数据
-- 更新系统tick和运行时长
+### 定时器
 
-#### 2. USB CDC数据发送
+- TIM2，时钟源Internal Clock
+- Prescaler=167，Period=999（1ms中断）
 
-- 使用`CDC_Transmit_FS()`发送数据
-- 将float数据通过memcpy转换为字节数组
-- 注意发送间隔，避免FIFO忙
+### 注意
 
-#### 3. USB CDC数据接收
+- USB需要严格的48MHz时钟，PLL_Q要设为7
+- LED从PD2改成了PA5
 
-- 在`CDC_Receive_FS()`回调中处理接收到的数据
-- 将数据复制到全局缓冲区，主循环中解析命令
+## 代码实现
 
-#### 4. 命令解析
-
-- `led_on`：点亮LED
-- `led_off`：熄灭LED
-- `led_twinkle`：LED以100ms间隔闪烁
-- `sinx`：切换正弦波生成模式
-
-### 关键代码实现
-
-#### main.c
+### 全局变量
 
 ```c
-// 定时器中断回调
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-    if (htim->Instance == TIM2) {
-        system_tick++;
-        run_seconds = (float)system_tick / 10.0f;
+uint32_t system_tick = 0;      // 系统运行滴答
+float run_seconds = 0.0f;     // 运行时长（秒）
+uint8_t led_twinkle_mode = 0; // LED闪烁模式
+uint8_t sinx_mode = 0;        // 正弦波模式
+float sinx_angle = 0.0f;      // 正弦波角度
+uint8_t protocol_mode = 0;   // 0=JustFloat, 1=FireWater
+```
+
+### 主循环逻辑
+
+```c
+while (1) {
+    static uint32_t last_send = 0;
+    if (HAL_GetTick() - last_send >= 100) {
+        last_send = HAL_GetTick();
+        run_seconds = (float)last_send / 1000.0f;
         
         if (sinx_mode) {
             sinx_angle += 0.1f;
             float sin_value = sin(sinx_angle);
             Send_JustFloat_Data(run_seconds, sin_value);
         } else {
-            Send_JustFloat_Data((float)system_tick, run_seconds);
+            Send_JustFloat_Data(run_seconds, run_seconds);
         }
     }
-}
-
-// JustFloat数据发送
-void Send_JustFloat_Data(float ch0, float ch1) {
-    uint8_t buffer[8];
-    memcpy(buffer, &ch0, 4);
-    memcpy(buffer + 4, &ch1, 4);
-    CDC_Transmit_FS(buffer, 8);
-}
-
-// 命令处理
-void Process_Command(uint8_t *cmd, uint32_t len) {
-    if (strncmp((char*)cmd, "led_on", 6) == 0) {
-        LED_On();
-    } else if (strncmp((char*)cmd, "led_off", 7) == 0) {
-        LED_Off();
-    } else if (strncmp((char*)cmd, "led_twinkle", 12) == 0) {
-        LED_Twinkle();
-    } else if (strncmp((char*)cmd, "sinx", 4) == 0) {
-        sinx_mode = !sinx_mode;
+    
+    if (led_twinkle_mode) {
+        // LED闪烁控制
     }
 }
 ```
 
-#### usbd\_cdc\_if.c
+### 发送函数（支持两种协议）
 
 ```c
-// 接收回调
+void Send_JustFloat_Data(float ch0, float ch1) {
+    if (protocol_mode == 0) {
+        // JustFloat二进制协议
+        uint8_t buffer[12];
+        memcpy(buffer, &ch0, 4);
+        memcpy(buffer + 4, &ch1, 4);
+        buffer[8] = 0x00;
+        buffer[9] = 0x00;
+        buffer[10] = 0x80;
+        buffer[11] = 0x7f;
+        CDC_Transmit_FS(buffer, 12);
+    } else {
+        // FireWater文本协议
+        char buffer[64];
+        uint32_t hours = (uint32_t)(run_seconds / 3600);
+        uint32_t minutes = (uint32_t)(run_seconds / 60) % 60;
+        uint32_t seconds = (uint32_t)run_seconds % 60;
+        
+        uint16_t len = sprintf(buffer, "2026-05-19 %02lu:%02lu:%02lu %.2f\n",
+                              hours, minutes, seconds, run_seconds);
+        CDC_Transmit_FS((uint8_t*)buffer, len);
+    }
+}
+```
+
+### 命令处理
+
+```c
+void Process_Command(uint8_t *cmd, uint32_t len) {
+    if (len > 0 && len < APP_RX_DATA_SIZE) {
+        cmd[len] = '\0';  // 必须加结束符，不然字符串函数会出问题
+    }
+    
+    if (strncmp((char*)cmd, "led_on", 6) == 0) {
+        LED_On();
+    } else if (strncmp((char*)cmd, "led_off", 7) == 0) {
+        LED_Off();
+    } else if (strncmp((char*)cmd, "led_twinkle", 11) == 0) {
+        LED_Twinkle();
+    } else if (strncmp((char*)cmd, "sinx", 4) == 0) {
+        sinx_mode = !sinx_mode;
+        if (sinx_mode) sinx_angle = 0.0f;
+    } else if (strncmp((char*)cmd, "proto_justfloat", 16) == 0) {
+        protocol_mode = 0;
+    } else if (strncmp((char*)cmd, "proto_firewater", 16) == 0) {
+        protocol_mode = 1;
+    }
+}
+```
+
+### USB接收回调
+
+```c
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len) {
     USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
     USBD_CDC_ReceivePacket(&hUsbDeviceFS);
@@ -119,25 +135,49 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len) {
 }
 ```
 
-### 调试要点
+## VOFA+使用
 
-1. **USB驱动安装**
-   - Windows 10/11自动识别虚拟串口
-   - 设备管理器中查看COM端口号
-   - 烧录：probe-rs run --chip STM32F407VETx .\build\Debug\STM32f407vet6.elf
-2. **VOFA+配置**
-   - 协议选择：JustFloat
-   - 通道绑定：根据数据顺序绑定显示
-3. **常见问题**
-   - 发送失败：检查USB连接和驱动
-   - 数据不显示：确认协议选择正确
-   - LED不响应：检查GPIO配置和命令格式
+### JustFloat模式（看波形）
 
-### 学习总结
+1. 协议选JustFloat
+2. 新建仪表板，添加示波器
+3. 添加两个通道：数据0、数据1
+4. 在仪表板看波形，不要在终端看（终端显示乱码是正常的）
 
-1. USB CDC本质是通过USB模拟传统串口，上位机无需额外驱动
-2. JustFloat协议高效，适合实时数据传输，通过帧尾识别数据包
-3. 定时器中断用于精确计时和定时任务
-4. 命令解析使用字符串比较函数，注意命令格式匹配
-5. HAL库提供了便捷的USB CDC接口函数，简化开发流程
+### FireWater模式（看日志）
 
+1. 发送命令`proto_firewater`
+2. 协议改成FireWater
+3. 在终端看文本日志
+
+输出格式：
+```
+2026-05-19 00:00:00 0.00
+2026-05-19 00:00:01 1.00
+2026-05-19 00:02:03 123.45
+```
+
+## 遇到的问题
+
+1. **Type-C插上不显示COM口**
+   - 不要插烧录口
+
+2. **VOFA+看不到数据**
+   - JustFloat协议终端显示乱码是正常的，要在仪表板看
+   - FireWater要在终端看
+
+3. **烧录后灯不闪**
+   - 检查GPIO配置是否正确，PA5要设为输出模式
+   - 检查代码是否正确烧录，是否有错误
+
+4. **命令不响应**
+   - 检查命令格式是否正确
+   - 记得加`\0`结束符
+
+## 总结
+
+- USB CDC就是模拟串口，Windows自动装驱动
+- JustFloat是二进制协议，适合看波形
+- FireWater是文本协议，适合看日志
+- 两种协议可以动态切换，一个固件搞定
+- 发送间隔不要太短，100ms比较稳
