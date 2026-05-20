@@ -1,3 +1,0 @@
-D:/GithubProject/whsw-Task1-liuzhiheng/Task1-USB虚拟串口通信/core/Core/Src/stm32f4xx_hal_msp.c:62:6:HAL_MspInit	16	static
-D:/GithubProject/whsw-Task1-liuzhiheng/Task1-USB虚拟串口通信/core/Core/Src/stm32f4xx_hal_msp.c:85:6:HAL_TIM_Base_MspInit	24	static
-D:/GithubProject/whsw-Task1-liuzhiheng/Task1-USB虚拟串口通信/core/Core/Src/stm32f4xx_hal_msp.c:111:6:HAL_TIM_Base_MspDeInit	16	static
