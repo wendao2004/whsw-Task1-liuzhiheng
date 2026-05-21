@@ -8,7 +8,7 @@ STM32F407VET6，用probe-rs烧录
 
 - 烧录用ST-Link接口
 - 通信用Type-C接口（USB OTG）
-- LED在PA5
+- LED在PA5引脚上
 
 ## CubeMX配置
 
@@ -134,6 +134,98 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len) {
     return (USBD_OK);
 }
 ```
+
+## 函数说明
+
+### HAL库函数
+
+#### HAL_GetTick()
+- 获取系统启动后的毫秒数
+- 返回值：uint32_t类型，单位毫秒
+- 用法：用于定时判断
+```c
+if (HAL_GetTick() - last_send >= 100) {
+    // 过了100ms
+}
+```
+
+#### HAL_GPIO_WritePin()
+- 设置GPIO引脚电平
+- 参数：GPIOx（端口）、GPIO_Pin（引脚）、PinState（状态）
+- 用法：点亮或熄灭LED
+```c
+HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);  // 点亮
+HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);  // 熄灭
+```
+
+#### HAL_GPIO_TogglePin()
+- 翻转GPIO引脚电平
+- 用法：LED闪烁
+```c
+HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
+```
+
+#### HAL_TIM_Base_Start_IT()
+- 启动定时器中断模式
+- 参数：定时器句柄
+- 用法：启动TIM2中断
+```c
+HAL_TIM_Base_Start_IT(&htim2);
+```
+
+### USB CDC函数
+
+#### CDC_Transmit_FS()
+- 通过USB虚拟串口发送数据
+- 参数：数据缓冲区、数据长度
+- 用法：发送数据到VOFA+
+```c
+CDC_Transmit_FS(buffer, 12);
+```
+
+### 标准库函数
+
+#### strncmp()
+- 比较两个字符串的前n个字符
+- 返回值：0表示相等
+- 用法：命令解析
+```c
+if (strncmp((char*)cmd, "led_on", 6) == 0) {
+    // 执行命令
+}
+```
+
+#### sprintf()
+- 格式化字符串输出到缓冲区
+- 用法：生成文本日志
+```c
+sprintf(buffer, "%02lu:%02lu:%02lu %.2f\n", hours, minutes, seconds, run_seconds);
+```
+
+#### memcpy()
+- 内存复制
+- 用法：将float复制到字节数组
+```c
+memcpy(buffer, &ch0, 4);
+```
+
+#### sin()
+- 计算正弦值（弧度）
+- 用法：生成正弦波数据
+```c
+float sin_value = sin(angle);
+```
+
+### 自定义函数
+
+#### LED_On() / LED_Off() / LED_Twinkle()
+- LED控制函数，分别实现点亮、熄灭、闪烁切换
+
+#### Send_JustFloat_Data()
+- 发送数据到VOFA+，支持JustFloat和FireWater两种协议
+
+#### Process_Command()
+- 处理VOFA+发来的命令，解析并执行相应操作
 
 ## VOFA+使用
 

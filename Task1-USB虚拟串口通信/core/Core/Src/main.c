@@ -60,9 +60,9 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_TIM2_Init(void);
+void SystemClock_Config(void);// 配置系统时钟
+static void MX_GPIO_Init(void);// 初始化GPIO引脚
+static void MX_TIM2_Init(void);// 初始化定时器2
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -86,25 +86,25 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+  HAL_Init();// 初始化HAL库
 
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
 
   /* Configure the system clock */
-  SystemClock_Config();
+  SystemClock_Config();// 配置系统时钟
 
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_TIM2_Init();
-  MX_USB_DEVICE_Init();
+  MX_GPIO_Init();// 初始化GPIO引脚
+  MX_TIM2_Init();// 初始化定时器2
+  MX_USB_DEVICE_Init();// 初始化USB设备
   /* USER CODE BEGIN 2 */
-  HAL_TIM_Base_Start_IT(&htim2);
+  HAL_TIM_Base_Start_IT(&htim2);// 启动定时器2中断
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -238,20 +238,20 @@ static void MX_TIM2_Init(void)
   * @param None
   * @retval None
   */
-static void MX_GPIO_Init(void)
+static void MX_GPIO_Init(void)// 初始化GPIO引脚
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  GPIO_InitTypeDef GPIO_InitStruct = {0};// GPIO初始化结构体，用于配置GPIO引脚的属性
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();// 使能GPIOH时钟
+  __HAL_RCC_GPIOA_CLK_ENABLE();// 使能GPIOA时钟
+  __HAL_RCC_GPIOD_CLK_ENABLE();// 使能GPIOD时钟
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);// 初始化LED引脚为低电平，关闭LED
 
   /*Configure GPIO pin : led_Pin */
   GPIO_InitStruct.Pin = led_Pin;
@@ -267,7 +267,7 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 // TIM2 定时器中断回调函数
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {// 定时器2中断回调函数
   if (htim->Instance == TIM2) {
     system_tick++;// 系统计时器增加1
     run_seconds = (float)system_tick / 1000.0f;   // 计算运行时间，单位秒
