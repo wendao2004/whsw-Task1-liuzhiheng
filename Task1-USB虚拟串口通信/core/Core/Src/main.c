@@ -48,14 +48,11 @@ TIM_HandleTypeDef htim2;
 /* USER CODE BEGIN PV */
 uint32_t system_tick = 0;
 float run_seconds = 0.0f;
-uint8_t led_state = 0;
 uint8_t led_twinkle_mode = 0;
 uint8_t sinx_mode = 0;
-float sinx_angle = 0.0f;
 uint16_t send_counter = 0;
 uint16_t led_twinkle_counter = 0;
-uint8_t usb_sent = 0;
-uint8_t protocol_mode = 0;  // 0=JustFloat, 1=FireWater
+uint8_t protocol_mode = 0;  // 0=JustFloat(看波形), 1=FireWater(看日志)
 extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END PV */
 
@@ -114,21 +111,16 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    // 数据定时发送
-    // 每 100ms 触发一次数据发送：
-    // 正弦模式：计算正弦值，发送「运行时间 + 正弦值」
-    // 普通模式：发送「系统计时 + 运行秒数」
     static uint32_t last_send = 0;
     if (HAL_GetTick() - last_send >= 100) {
-      last_send = HAL_GetTick();// 更新上次发送时间戳
-      run_seconds = (float)last_send / 1000.0f; // 计算运行时间，单位秒
-      // 发送数据
+      last_send = HAL_GetTick();
+      run_seconds = (float)last_send / 1000.0f;
+      
       if (sinx_mode) {
-        sinx_angle += 0.1f;// 正弦角度自增0.1度
-        float sin_value = sin(sinx_angle);// 计算正弦值
-        Send_JustFloat_Data(run_seconds, sin_value);// 发送运行时间 + 正弦值
+        float angle = (float)HAL_GetTick() * 0.001f;  // 毫秒转秒作为角度
+        Send_JustFloat_Data(run_seconds, sinf(angle));
       } else {
-        Send_JustFloat_Data(run_seconds, run_seconds);// 发送系统计时 + 运行秒数
+        Send_JustFloat_Data(run_seconds, run_seconds);
       }
     }
     
@@ -267,44 +259,41 @@ static void MX_GPIO_Init(void)// 初始化GPIO引脚
 
 /* USER CODE BEGIN 4 */
 // TIM2 定时器中断回调函数
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {// 定时器2中断回调函数
-  if (htim->Instance == TIM2) {
-    system_tick++;// 系统计时器增加1
-    run_seconds = (float)system_tick / 1000.0f;   // 计算运行时间，单位秒
-    send_counter++;// 发送计数器增加1
+// void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {// 定时器2中断回调函数
+//   if (htim->Instance == TIM2) {
+//     system_tick++;// 系统计时器增加1
+//     run_seconds = (float)system_tick / 1000.0f;   // 计算运行时间，单位秒
+//     send_counter++;// 发送计数器增加1
 
-    if (send_counter >= 100) {
-      send_counter = 0;// 重置发送计数器
-      if (sinx_mode) {
-        sinx_angle += 0.1f;// 增加正弦角度
-        float sin_value = sin(sinx_angle);// 计算正弦值
-        Send_JustFloat_Data(run_seconds, sin_value);//发送「运行时间 + 正弦值」
-      } else {
-        Send_JustFloat_Data((float)system_tick, run_seconds);//发送「系统计时 + 运行秒数」
-      }
-    }
-//LED 闪烁：开启 led_twinkle_mode 时，每 100ms 翻转一次 LED 电平，实现闪烁。
-    if (led_twinkle_mode) {
-      led_twinkle_counter++;
-      if (led_twinkle_counter >= 100) {
-        led_twinkle_counter = 0;//重置闪烁计数器
-        HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);//切换 LED 电平，实现闪烁
-      }
-    }
-  }
-}
+//     if (send_counter >= 100) {
+//       send_counter = 0;// 重置发送计数器
+//       if (sinx_mode) {
+//         sinx_angle += 0.1f;// 增加正弦角度
+//         float sin_value = sin(sinx_angle);// 计算正弦值
+//         Send_JustFloat_Data(run_seconds, sin_value);//发送「运行时间 + 正弦值」
+//       } else {
+//         Send_JustFloat_Data((float)system_tick, run_seconds);//发送「系统计时 + 运行秒数」
+//       }
+//     }
+// //LED 闪烁：开启 led_twinkle_mode 时，每 100ms 翻转一次 LED 电平，实现闪烁。
+//     if (led_twinkle_mode) {
+//       led_twinkle_counter++;
+//       if (led_twinkle_counter >= 100) {
+//         led_twinkle_counter = 0;//重置闪烁计数器
+//         HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);//切换 LED 电平，实现闪烁
+//       }
+//     }
+//   }
+// }
 
-// 点亮 LED 灯，关闭闪烁模式
 void LED_On(void) {
-  led_twinkle_mode = 0;//禁用 LED 闪烁模式（led_twinkle_mode=0）
-  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_SET);//硬件置位 LED 引脚，点亮 LED
-  led_state = 1;//标记 LED 当前状态为开启（led_state=1）
+  led_twinkle_mode = 0;
+  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_SET);
 }
-//实现 LED 灯关闭操作
+
 void LED_Off(void) {
-  led_twinkle_mode = 0;//禁用 LED 闪烁模式（led_twinkle_mode=0）
-  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);//硬件置位 LED 引脚，熄灭 LED
-  led_state = 0;//标记 LED 当前状态为关闭（led_state=0）
+  led_twinkle_mode = 0;
+  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
 }
 //切换 LED 闪烁模式
 void LED_Twinkle(void) {
@@ -314,51 +303,61 @@ void LED_Twinkle(void) {
     }
 }
 
-//发送 JustFloat 数据
+// 发送数据到VOFA+
 void Send_JustFloat_Data(float ch0, float ch1) {
     if (protocol_mode == 0) {
-        uint8_t buffer[12];// 12字节缓冲区，用于存储 JustFloat 数据
-        memcpy(buffer, &ch0, 4);// 复制 ch0 到缓冲区前 4 个字节
-        memcpy(buffer + 4, &ch1, 4);// 复制 ch1 到缓冲区后 4 个字节
-        buffer[8] = 0x00;// 填充 0x00 字节
-        buffer[9] = 0x00;// 填充 0x00 字节
-        buffer[10] = 0x80;// 填充 0x80 字节
-        buffer[11] = 0x7f;// 填充 0x7f 字节
-        CDC_Transmit_FS(buffer, 12);//发送 JustFloat 数据
-    }
-//发送 FireWater 数据
-     else {
+        // JustFloat协议：适合看波形（正弦图）
+        uint8_t buffer[12];
+        memcpy(buffer, &ch0, 4);
+        memcpy(buffer + 4, &ch1, 4);
+        buffer[8] = 0x00;
+        buffer[9] = 0x00;
+        buffer[10] = 0x80;
+        buffer[11] = 0x7f;
+        CDC_Transmit_FS(buffer, 12);
+    } else {
+        // FireWater协议：适合看日志
         char buffer[64];
-        uint32_t hours = (uint32_t)(run_seconds / 3600);//计算小时数
-        uint32_t minutes = (uint32_t)(run_seconds / 60) % 60;//计算分钟数
-        uint32_t seconds = (uint32_t)run_seconds % 60;//计算秒数
+        uint32_t hours = (uint32_t)(run_seconds / 3600);
+        uint32_t minutes = (uint32_t)(run_seconds / 60) % 60;
+        uint32_t seconds = (uint32_t)run_seconds % 60;
         
         uint16_t len = sprintf(buffer, "2026-05-19 %02lu:%02lu:%02lu %.2f\n",
-                              hours, minutes, seconds, run_seconds);//格式化字符串
-        CDC_Transmit_FS((uint8_t*)buffer, len);//发送 FireWater 数据
+                              hours, minutes, seconds, run_seconds);
+        CDC_Transmit_FS((uint8_t*)buffer, len);
     }
 }
-//处理命令
+// 处理命令
 void Process_Command(uint8_t *cmd, uint32_t len) {
   if (len > 0 && len < APP_RX_DATA_SIZE) {
-    cmd[len] = '\0';//添加字符串结束符
+    cmd[len] = '\0';
   }
   
-  if (strncmp((char*)cmd, "led_on", 6) == 0) {
-    LED_On();//点亮 LED 灯
-  } else if (strncmp((char*)cmd, "led_off", 7) == 0) {
-    LED_Off();//熄灭 LED 灯
-  } else if (strncmp((char*)cmd, "led_twinkle", 12) == 0) {
-    LED_Twinkle();//切换 LED 闪烁模式
-  } else if (strncmp((char*)cmd, "sinx", 4) == 0) {
-    sinx_mode = !sinx_mode;//切换正弦模式
-    if (sinx_mode) {
-      sinx_angle = 0.0f;//重置正弦角度
+  // 去除换行符
+  char *p = (char*)cmd;
+  while (*p != '\0') {
+    if (*p == '\r' || *p == '\n') {
+      *p = '\0';
+      break;
     }
-  } else if (strncmp((char*)cmd, "proto_justfloat", 16) == 0) {
-    protocol_mode = 0;//切换协议 JustFloat
-  } else if (strncmp((char*)cmd, "proto_firewater", 16) == 0) {
-    protocol_mode = 1;//切换协议 FireWater
+    p++;
+  }
+  
+  if (strcmp((char*)cmd, "led_on") == 0) {
+    LED_On();
+  } else if (strcmp((char*)cmd, "led_off") == 0) {
+    LED_Off();
+  } else if (strcmp((char*)cmd, "led_twinkle") == 0) {
+    LED_Twinkle();
+  } else if (strcmp((char*)cmd, "sinx") == 0) {
+    sinx_mode = !sinx_mode;
+    if (sinx_mode) {
+      sinx_angle = 0.0f;
+    }
+  } else if (strcmp((char*)cmd, "proto_justfloat") == 0) {
+    protocol_mode = 0;
+  } else if (strcmp((char*)cmd, "proto_firewater") == 0) {
+    protocol_mode = 1;
   }
 }
 /* USER CODE END 4 */
