@@ -6,7 +6,7 @@ STM32F407VET6，用probe-rs烧录
 
 ## 硬件连接
 
-- 烧录用ST-Link接口
+- 烧录用ST-Link接口:probe-rs run --chip STM32F407VETx .\build\Debug\STM32f407vet6.elf
 - 通信用Type-C接口（USB OTG）
 - LED在PA5引脚上
 
