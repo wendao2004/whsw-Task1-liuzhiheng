@@ -53,6 +53,8 @@ uint8_t sinx_mode = 0;
 uint16_t send_counter = 0;
 uint16_t led_twinkle_counter = 0;
 uint8_t protocol_mode = 0;  // 0=JustFloat(看波形), 1=FireWater(看日志)
+uint8_t motor_state = 0;     // 电机开关状态：0=关闭，1=开启
+float sinx_angle = 0.0f;    // 正弦波角度
 extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END PV */
 
@@ -252,8 +254,14 @@ static void MX_GPIO_Init(void)// 初始化GPIO引脚
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(led_GPIO_Port, &GPIO_InitStruct);
 
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
-
+/* USER CODE BEGIN MX_GPIO_Init_2 */
+  // 电机控制引脚初始化：PA6=PWM调速，PA7=方向控制
+  GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_RESET); // 初始化为低电平
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
@@ -301,6 +309,19 @@ void LED_Twinkle(void) {
     if (led_twinkle_mode) {
         led_twinkle_counter = 0;//重置闪烁计数器
     }
+}
+
+// 电机控制函数
+void Motor_On(void) {
+  motor_state = 1;
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);  // 方向引脚拉高
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET); // PWM引脚拉高（开启输出）
+}
+
+void Motor_Off(void) {
+  motor_state = 0;
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET); // PWM引脚拉低
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET); // 方向引脚也要拉低，彻底关闭
 }
 
 // 发送数据到VOFA+
@@ -358,6 +379,10 @@ void Process_Command(uint8_t *cmd, uint32_t len) {
     protocol_mode = 0;
   } else if (strcmp((char*)cmd, "proto_firewater") == 0) {
     protocol_mode = 1;
+  } else if (strcmp((char*)cmd,"motor_on") == 0) {
+    Motor_On();
+  } else if (strcmp((char*)cmd,"motor_off") == 0) {
+    Motor_Off();
   }
 }
 /* USER CODE END 4 */
