@@ -54,11 +54,6 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
-void LED_On(void);
-void LED_Off(void);
-void LED_Twinkle(void);
-void Send_JustFloat_Data(float ch0, float ch1);
-void Process_Command(uint8_t *cmd, uint32_t len);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
