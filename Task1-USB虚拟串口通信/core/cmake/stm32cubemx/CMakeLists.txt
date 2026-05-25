@@ -32,6 +32,11 @@ set(MX_Application_Src
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/stm32f4xx_hal_msp.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/sysmem.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/syscalls.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/led.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/motor.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/data_send.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/cmd_parse.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Core/Src/task_loop.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../startup_stm32f407xx.s
 )
 

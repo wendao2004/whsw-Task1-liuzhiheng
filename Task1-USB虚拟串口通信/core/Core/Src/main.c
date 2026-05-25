@@ -19,54 +19,44 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
+#include "led.h"
+#include "motor.h"
+#include "task_loop.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
-#include <string.h>
-#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
-uint32_t system_tick = 0;
-float run_seconds = 0.0f;
-uint8_t led_twinkle_mode = 0;
 uint8_t sinx_mode = 0;
-uint16_t send_counter = 0;
-uint16_t led_twinkle_counter = 0;
-uint8_t protocol_mode = 0;  // 0=JustFloat(看波形), 1=FireWater(看日志)
-extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void SystemClock_Config(void);// 配置系统时钟
-static void MX_GPIO_Init(void);// 初始化GPIO引脚
-static void MX_TIM2_Init(void);// 初始化定时器2
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
-
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
@@ -75,33 +65,31 @@ static void MX_TIM2_Init(void);// 初始化定时器2
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();// 初始化HAL库
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
-  SystemClock_Config();// 配置系统时钟
+  SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
   /* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();// 初始化GPIO引脚
-  MX_TIM2_Init();// 初始化定时器2
-  MX_USB_DEVICE_Init();// 初始化USB设备
+  MX_GPIO_Init();
+  MX_TIM2_Init();
+  MX_TIM4_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_Base_Start_IT(&htim2);// 启动定时器2中断
+  HAL_TIM_Base_Start_IT(&htim2);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
+  
+  task_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -111,26 +99,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    static uint32_t last_send = 0;
-    if (HAL_GetTick() - last_send >= 100) {
-      last_send = HAL_GetTick();
-      run_seconds = (float)last_send / 1000.0f;
-      
-      if (sinx_mode) {
-        float angle = (float)HAL_GetTick() * 0.001f;  // 毫秒转秒作为角度
-        Send_JustFloat_Data(run_seconds, sinf(angle));
-      } else {
-        Send_JustFloat_Data(run_seconds, run_seconds);
-      }
-    }
-    
-    if (led_twinkle_mode) {
-      static uint32_t last_toggle = 0;// 上次切换时间戳
-      if (HAL_GetTick() - last_toggle >= 100) {
-        last_toggle = HAL_GetTick();// 更新上次切换时间戳
-        HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);// 切换LED状态
-      }
-    }
+    task_run();
   }
   /* USER CODE END 3 */
 }
@@ -144,14 +113,9 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Configure the main internal regulator output voltage
-  */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -165,8 +129,6 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
@@ -187,17 +149,9 @@ void SystemClock_Config(void)
   */
 static void MX_TIM2_Init(void)
 {
-
-  /* USER CODE BEGIN TIM2_Init 0 */
-
-  /* USER CODE END TIM2_Init 0 */
-
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
 
-  /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 167;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -219,10 +173,43 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM2_Init 2 */
+}
 
-  /* USER CODE END TIM2_Init 2 */
+/**
+  * @brief TIM4 Initialization Function (Encoder mode for speed measurement)
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+  TIM_Encoder_InitTypeDef sConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
 
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 0;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 65535;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
+  sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC1Filter = 0;
+  sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC2Filter = 0;
+  if (HAL_TIM_Encoder_Init(&htim4, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**
@@ -230,136 +217,39 @@ static void MX_TIM2_Init(void)
   * @param None
   * @retval None
   */
-static void MX_GPIO_Init(void)// 初始化GPIO引脚
+static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};// GPIO初始化结构体，用于配置GPIO引脚的属性
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-  /* USER CODE END MX_GPIO_Init_1 */
+  __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
-  /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOH_CLK_ENABLE();// 使能GPIOH时钟
-  __HAL_RCC_GPIOA_CLK_ENABLE();// 使能GPIOA时钟
-  __HAL_RCC_GPIOD_CLK_ENABLE();// 使能GPIOD时钟
+  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);// 初始化LED引脚为低电平，关闭LED
-
-  /*Configure GPIO pin : led_Pin */
   GPIO_InitStruct.Pin = led_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(led_GPIO_Port, &GPIO_InitStruct);
 
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_RESET);
 
-  /* USER CODE END MX_GPIO_Init_2 */
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF2_TIM4;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 }
 
 /* USER CODE BEGIN 4 */
-// TIM2 定时器中断回调函数
-// void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {// 定时器2中断回调函数
-//   if (htim->Instance == TIM2) {
-//     system_tick++;// 系统计时器增加1
-//     run_seconds = (float)system_tick / 1000.0f;   // 计算运行时间，单位秒
-//     send_counter++;// 发送计数器增加1
-
-//     if (send_counter >= 100) {
-//       send_counter = 0;// 重置发送计数器
-//       if (sinx_mode) {
-//         sinx_angle += 0.1f;// 增加正弦角度
-//         float sin_value = sin(sinx_angle);// 计算正弦值
-//         Send_JustFloat_Data(run_seconds, sin_value);//发送「运行时间 + 正弦值」
-//       } else {
-//         Send_JustFloat_Data((float)system_tick, run_seconds);//发送「系统计时 + 运行秒数」
-//       }
-//     }
-// //LED 闪烁：开启 led_twinkle_mode 时，每 100ms 翻转一次 LED 电平，实现闪烁。
-//     if (led_twinkle_mode) {
-//       led_twinkle_counter++;
-//       if (led_twinkle_counter >= 100) {
-//         led_twinkle_counter = 0;//重置闪烁计数器
-//         HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);//切换 LED 电平，实现闪烁
-//       }
-//     }
-//   }
-// }
-
-void LED_On(void) {
-  led_twinkle_mode = 0;
-  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_SET);
-}
-
-void LED_Off(void) {
-  led_twinkle_mode = 0;
-  HAL_GPIO_WritePin(led_GPIO_Port, led_Pin, GPIO_PIN_RESET);
-}
-//切换 LED 闪烁模式
-void LED_Twinkle(void) {
-    led_twinkle_mode = !led_twinkle_mode;  // 切换模式
-    if (led_twinkle_mode) {
-        led_twinkle_counter = 0;//重置闪烁计数器
-    }
-}
-
-// 发送数据到VOFA+
-void Send_JustFloat_Data(float ch0, float ch1) {
-    if (protocol_mode == 0) {
-        // JustFloat协议：适合看波形（正弦图）
-        uint8_t buffer[12];
-        memcpy(buffer, &ch0, 4);
-        memcpy(buffer + 4, &ch1, 4);
-        buffer[8] = 0x00;
-        buffer[9] = 0x00;
-        buffer[10] = 0x80;
-        buffer[11] = 0x7f;
-        CDC_Transmit_FS(buffer, 12);
-    } else {
-        // FireWater协议：适合看日志
-        char buffer[64];
-        uint32_t hours = (uint32_t)(run_seconds / 3600);
-        uint32_t minutes = (uint32_t)(run_seconds / 60) % 60;
-        uint32_t seconds = (uint32_t)run_seconds % 60;
-        
-        uint16_t len = sprintf(buffer, "2026-05-19 %02lu:%02lu:%02lu %.2f\n",
-                              hours, minutes, seconds, run_seconds);
-        CDC_Transmit_FS((uint8_t*)buffer, len);
-    }
-}
-// 处理命令
-void Process_Command(uint8_t *cmd, uint32_t len) {
-  if (len > 0 && len < APP_RX_DATA_SIZE) {
-    cmd[len] = '\0';
-  }
-  
-  // 去除换行符
-  char *p = (char*)cmd;
-  while (*p != '\0') {
-    if (*p == '\r' || *p == '\n') {
-      *p = '\0';
-      break;
-    }
-    p++;
-  }
-  
-  if (strcmp((char*)cmd, "led_on") == 0) {
-    LED_On();
-  } else if (strcmp((char*)cmd, "led_off") == 0) {
-    LED_Off();
-  } else if (strcmp((char*)cmd, "led_twinkle") == 0) {
-    LED_Twinkle();
-  } else if (strcmp((char*)cmd, "sinx") == 0) {
-    sinx_mode = !sinx_mode;
-    if (sinx_mode) {
-      sinx_angle = 0.0f;
-    }
-  } else if (strcmp((char*)cmd, "proto_justfloat") == 0) {
-    protocol_mode = 0;
-  } else if (strcmp((char*)cmd, "proto_firewater") == 0) {
-    protocol_mode = 1;
-  }
-}
 /* USER CODE END 4 */
 
 /**
@@ -369,13 +259,13 @@ void Process_Command(uint8_t *cmd, uint32_t len) {
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
   }
   /* USER CODE END Error_Handler_Debug */
 }
+
 #ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
@@ -387,8 +277,6 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
